@@ -1,0 +1,79 @@
+FROM nvidia/cuda:11.1.1-devel-ubuntu20.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Remove any third-party apt sources to avoid issues with expiring keys.
+RUN rm -f /etc/apt/sources.list.d/*.list
+
+# Install some basic utilities
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    sudo \
+    git \
+    bzip2 \
+    libx11-6 \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
+SHELL ["/bin/bash", "-c"]
+
+RUN curl -sLo ~/miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-py39_4.10.3-Linux-x86_64.sh \
+    && chmod +x ~/miniconda.sh \
+    && ~/miniconda.sh -b -p /opt/conda \
+    && rm ~/miniconda.sh
+
+ENV PATH=/opt/conda/bin:$PATH
+
+RUN source /opt/conda/etc/profile.d/conda.sh \
+    && conda activate base \
+    && conda update -n base conda -y \
+    && conda install python=3.9 \
+    && python --version
+
+RUN source /opt/conda/etc/profile.d/conda.sh \
+    && conda init bash \
+    && conda config --set auto_activate_base true
+
+# ENV settings
+ENV FORCE_CUDA="1"
+ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0+PTX"
+ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
+ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
+
+RUN conda install cudatoolkit=11.1.1 -c conda-forge
+
+RUN pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
+
+# MM Environment ->Adapt
+ARG MMCV="2.1.0"
+ARG MMDET="3.3.0"
+# dev mode (for developement / debugging)
+RUN mkdir /deps
+RUN cd /deps \
+    && git clone https://github.com/open-mmlab/mmcv.git \
+    && cd mmcv \
+    && git checkout tags/v${MMCV} \
+    && MMCV_WITH_OPS=1 pip install -e .
+
+RUN cd /deps \
+    && git clone https://github.com/open-mmlab/mmdetection.git \
+    && cd mmdetection \
+    && git checkout tags/v${MMDET}
+
+# patch bug to handle empty images
+COPY docker/crowdhuman.patch /deps/mmdetection/crowdhuman.patch
+
+RUN cd /deps/mmdetection \
+    && git apply crowdhuman.patch \
+    && pip install -e .
+
+# avoid error with distutils
+RUN pip install wandb setuptools==59.5.0 Pillow==9.5.0 numba==0.53 numpy==1.23.5 einops
+
+RUN source /opt/conda/etc/profile.d/conda.sh \
+    && conda init bash \
+    && conda config --set auto_activate_base true
+

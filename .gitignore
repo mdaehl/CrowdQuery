@@ -1,0 +1,7 @@
+work_dirs/
+logs/
+.devcontainer/
+outputs/
+**/__pycache__/
+.vscode/
+data/

@@ -1,0 +1,15 @@
+Subject: [PATCH] crowdhuman
+---
+Index: mmdet/evaluation/metrics/crowdhuman_metric.py
+===================================================================
+diff --git a/mmdet/evaluation/metrics/crowdhuman_metric.py b/mmdet/evaluation/metrics/crowdhuman_metric.py
+--- a/mmdet/evaluation/metrics/crowdhuman_metric.py
++++ b/mmdet/evaluation/metrics/crowdhuman_metric.py
+@@ -631,6 +631,6 @@
+         """load ground_truth and transform [x, y, w, h] to [x1, y1, x2, y2]"""
+         assert key_name in dict_input
+         if len(dict_input[key_name]) < 1:
+-            return np.empty([0, 5])
++            return np.empty([0, 5]), np.empty([0, 5])
+         head_bbox = []
+         body_bbox = []

@@ -1,0 +1,68 @@
+FROM nvidia/cuda:11.1.1-devel-ubuntu20.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Remove any third-party apt sources to avoid issues with expiring keys.
+RUN rm -f /etc/apt/sources.list.d/*.list
+
+# Install some basic utilities
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    sudo \
+    git \
+    bzip2 \
+    libx11-6 \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
+SHELL ["/bin/bash", "-c"]
+
+RUN curl -sLo ~/miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-py39_4.10.3-Linux-x86_64.sh \
+    && chmod +x ~/miniconda.sh \
+    && ~/miniconda.sh -b -p /opt/conda \
+    && rm ~/miniconda.sh
+
+ENV PATH=/opt/conda/bin:$PATH
+ENV CUDA_HOME=/usr/local/cuda-11.1
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64
+ENV PATH=$PATH:$CUDA_HOME/bin
+
+RUN source /opt/conda/etc/profile.d/conda.sh \
+    && conda activate base \
+    && conda update -n base conda -y \
+    && conda install python=3.8 \
+    && python --version
+
+RUN source /opt/conda/etc/profile.d/conda.sh \
+    && conda init bash \
+    && conda config --set auto_activate_base true
+
+ENV FORCE_CUDA="1"
+ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0 7.5 8.0 8.6+PTX"
+ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
+ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
+
+RUN conda install cudatoolkit=11.1.1 -c conda-forge
+
+RUN pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
+
+COPY three_d /tmp/MonoDETR
+
+WORKDIR /tmp/MonoDETR
+RUN pip install -r requirements.txt
+RUN pip install einops matplotlib wandb numba==0.53 numpy==1.23.1 tensorboard setuptools==59.5.0 six
+
+WORKDIR /tmp/MonoDETR/model/ops
+RUN bash make.sh
+
+
+RUN source /opt/conda/etc/profile.d/conda.sh \
+    && conda init bash \
+    && conda config --set auto_activate_base true
+
+RUN chmod -R +rwx /tmp/MonoDETR
+
+WORKDIR /root/
